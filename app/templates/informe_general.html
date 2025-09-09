@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Informe General de Tickets</h2>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Fecha Apertura</th>
+            <th>Número Ticket</th>
+            <th>Departamento</th>
+            <th>Estado</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in datos %}
+        <tr>
+            <td>{{ row.fecha_apertura }}</td>
+            <td>{{ row.numero_ticket }}</td>
+            <td>{{ row.departamento }}</td>
+            <td>{{ row.estado }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

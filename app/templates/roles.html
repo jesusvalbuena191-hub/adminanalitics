@@ -1,0 +1,12 @@
+{% extends "layout.html" %}
+{% block title %}Gestión de Roles{% endblock %}
+{% block content %}
+<h2>Roles</h2>
+<form id="rolForm" class="row g-3">
+  <div class="col-md-4"><input type="text" id="nombreRol" class="form-control" placeholder="Nombre del Rol" required /></div>
+  <div class="col-md-6"><input type="text" id="descripcionRol" class="form-control" placeholder="Descripción" /></div>
+  <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">Crear</button></div>
+</form>
+<ul id="listaRoles" class="list-group mt-3"></ul>
+<script src="/static/js/roles.js"></script>
+{% endblock %}

@@ -1,0 +1,132 @@
+import requests
+import pandas as pd
+from sqlalchemy import create_engine
+import base64
+import datetime
+
+# === CONFIGURACIÓN SPOTIFY ===
+client_id = '7123669c670d486c8b8608931b38be6c'
+client_secret = 'e0e82b1e3204483a9c80de044083a207'
+
+# === CONFIGURACIÓN MYSQL ===
+MYSQL_USER = 'root'
+MYSQL_PASSWORD = ''
+MYSQL_HOST = 'localhost'
+MYSQL_PORT = '3306'
+MYSQL_DB = 'spotify_db'
+
+# Crear motor SQLAlchemy
+engine = create_engine(f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}")
+
+# === Obtener token de acceso ===
+def get_token(client_id, client_secret):
+    url = 'https://accounts.spotify.com/api/token'
+    headers = {
+        'Authorization': 'Basic ' + base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+    }
+    data = {'grant_type': 'client_credentials'}
+    r = requests.post(url, headers=headers, data=data)
+    return r.json()['access_token']
+
+# === Extraer tracks de una playlist ===
+def extract_playlist_tracks(token, playlist_id):
+    url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
+    headers = {'Authorization': f'Bearer {token}'}
+    params = {'market': 'CO', 'limit': 50}
+    r = requests.get(url, headers=headers, params=params)
+
+    if r.status_code != 200:
+        print(f"❌ Error al obtener playlist {playlist_id}: {r.json()}")
+        return {}
+    return r.json()
+
+# === Transformar datos de playlist ===
+def transform_playlist_data(data, playlist_id, genero):
+    if 'items' not in data:
+        print(f"❌ Error: 'items' no está en la respuesta de {playlist_id}")
+        return pd.DataFrame()
+
+    track_list = []
+    for item in data['items']:
+        track = item.get('track')
+        if track is None:
+            continue
+
+        # Extraer artistas
+        artists = track.get('artists', [])
+        artist_names = [artist['name'] for artist in artists]
+        artist_ids = [artist['id'] for artist in artists]
+
+        artist_name = ', '.join(artist_names) if artist_names else 'Desconocido'
+        artist_id = artist_ids[0] if artist_ids else 'Sin ID'
+
+        track_list.append({
+            'track_id': track['id'],
+            'track_name': track['name'],
+            'artist_id': artist_id,
+            'artist_name': artist_name,
+            'album': track['album']['name'],
+            'popularity': track['popularity'],
+            'duration_ms': track['duration_ms'],
+            'explicit': track['explicit'],
+            'release_date': track['album']['release_date'],
+            'timestamp': datetime.datetime.now(),
+            'source_playlist': playlist_id,
+            'genero': genero
+        })
+
+    return pd.DataFrame(track_list)
+
+# === Cargar datos a tabla específica (ahora usando append) ===
+def load_data(df, table_name):
+    if df.empty:
+        print(f"⚠️ No se cargaron datos para {table_name}.")
+        return
+    df.to_sql(table_name, engine, if_exists='append', index=False)
+    print(f"✅ Datos agregados en tabla '{table_name}'")
+
+# === MAIN: Ejecutar ETL por género ===
+if __name__ == "__main__":
+    print("🎶 Iniciando ETL por género...")
+
+    token = get_token(client_id, client_secret)
+
+    generos_playlists = {
+        'salsa': [
+            '0Q0GQM4RvwREw6DvTODkkr',
+            '3zYm5ddPEHAmdXH3mJeAKc',
+            '0FfcxKXQuJoMnqYGW0qn7s',
+            '0yfxXLq7v507ntTeySQc2V'
+        ],
+        'reggaeton': [
+            '03sDEv7FN58Mb9CJOs1Tgn',
+            '29jkNw8QoKFHob2Tc7Gdci',
+            '5KA5qtQU9zuaXpOeskKe3b',
+            '4iXi24GdAEXnMUFfdKJ4dh'
+        ],
+        'afrohouse': [
+            '580P0wvHL8eRYyEODWQAeR',
+            '487jKTFqWhs6b0AEUz0WpX',
+            '3qHwfL5da2vAT0ly7qpvuE',
+            '1Dggu3dvVfpEwLIRMPkyZo'
+        ]
+    }
+
+    for genero, playlist_ids in generos_playlists.items():
+        print(f"🎧 Procesando género: {genero}")
+        all_tracks = []
+
+        for pid in playlist_ids:
+            data = extract_playlist_tracks(token, pid)
+            df = transform_playlist_data(data, pid, genero)
+            if not df.empty:
+                all_tracks.append(df)
+
+        if all_tracks:
+            df_genero = pd.concat(all_tracks, ignore_index=True)
+            table_name = f"spotify_top_{genero}"
+            load_data(df_genero, table_name)
+        else:
+            print(f"⚠️ No se extrajeron datos para el género '{genero}'.")
+
+    print("🎯 ETL por género completado con éxito.")
